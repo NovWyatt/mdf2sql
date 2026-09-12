@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="vi" data-theme="auto">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>mdf2sql - Chuyen file .mdf sang .sql</title>
+<link rel="stylesheet" href="/app.css">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="topbar__inner">
+    <div class="brand">
+      <span class="brand__mark" aria-hidden="true"></span>
+      <span class="brand__name">mdf2sql</span>
+      <span class="brand__desc">Khôi phục dữ liệu SQL Server từ file .mdf</span>
+    </div>
+    <div class="topbar__right">
+      <span id="serverStatus" class="pill pill--muted">Đang dò SQL Server...</span>
+      <button id="themeToggle" class="btn btn--ghost btn--sm" type="button"
+              aria-label="Đổi giao diện sáng tối">Giao diện</button>
+    </div>
+  </div>
+</header>
+
+<main class="layout">
+
+  <!-- ============ CỘT TRÁI: cấu hình ============ -->
+  <section class="panel" aria-labelledby="cfgTitle">
+    <h1 id="cfgTitle" class="panel__title">Thiết lập</h1>
+
+    <div class="field">
+      <label class="label" for="mdfPath">File .mdf cần chuyển</label>
+      <div class="row">
+        <input id="mdfPath" class="input" type="text" spellcheck="false"
+               placeholder="D:\ITS\database\giuxe.mdf">
+        <button id="pickMdf" class="btn btn--outline" type="button">Chọn file</button>
+      </div>
+      <p class="help">Tool luôn làm việc trên bản sao, file gốc của bạn không bị thay đổi.</p>
+    </div>
+
+    <div id="fileCard" class="filecard" hidden>
+      <div class="filecard__head">
+        <span id="fileName" class="filecard__name"></span>
+        <span id="fileState" class="pill"></span>
+      </div>
+      <dl class="kv">
+        <div class="kv__item"><dt>Tên database</dt><dd id="fileDb">-</dd></div>
+        <div class="kv__item"><dt>Tạo bởi</dt><dd id="fileVer">-</dd></div>
+        <div class="kv__item"><dt>Kích thước</dt><dd id="fileSize">-</dd></div>
+        <div class="kv__item"><dt>File log .ldf</dt><dd id="fileLog">-</dd></div>
+      </dl>
+    </div>
+
+    <div class="field">
+      <label class="label" for="outPath">Lưu file .sql vào</label>
+      <div class="row">
+        <input id="outPath" class="input" type="text" spellcheck="false"
+               placeholder="Chọn file .mdf trước">
+        <button id="pickOut" class="btn btn--outline" type="button">Đổi chỗ</button>
+      </div>
+    </div>
+
+    <div class="field">
+      <span class="label">Tùy chọn</span>
+      <div class="options">
+        <label class="check">
+          <input type="checkbox" id="optData" checked>
+          <span><strong>Kèm dữ liệu</strong>
+            <em>Bỏ chọn nếu chỉ cần cấu trúc bảng.</em></span>
+        </label>
+        <label class="check">
+          <input type="checkbox" id="optCreateDb" checked>
+          <span><strong>Thêm lệnh tạo database</strong>
+            <em>File chạy được ngay mà không cần tạo database trước.</em></span>
+        </label>
+        <label class="check">
+          <input type="checkbox" id="optDrop" checked>
+          <span><strong>Xóa bảng cũ trước khi tạo</strong>
+            <em>Cho phép chạy lại file nhiều lần không báo lỗi trùng.</em></span>
+        </label>
+        <label class="check">
+          <input type="checkbox" id="optRepair" checked>
+          <span><strong>Tự sửa lỗi cấu trúc</strong>
+            <em>Chạy DBCC CHECKDB khi file hỏng do mất điện hoặc treo máy.</em></span>
+        </label>
+        <label class="check">
+          <input type="checkbox" id="optSkipBlob">
+          <span><strong>Bỏ qua cột ảnh</strong>
+            <em>Giảm dung lượng file khi database có lưu ảnh biển số.</em></span>
+        </label>
+      </div>
+    </div>
+
+    <div class="field">
+      <label class="label" for="targetDb">Tên database khi import lại</label>
+      <input id="targetDb" class="input" type="text" spellcheck="false"
+             placeholder="Giữ nguyên tên gốc">
+    </div>
+
+    <button id="runBtn" class="btn btn--primary btn--block" type="button" disabled>
+      Chuyển đổi
+    </button>
+    <p id="runHint" class="help help--center">Chọn file .mdf để bắt đầu</p>
+  </section>
+
+  <!-- ============ CỘT PHẢI: tiến trình và kết quả ============ -->
+  <section class="panel panel--flush" aria-labelledby="runTitle">
+    <h2 id="runTitle" class="panel__title">Tiến trình</h2>
+
+    <!-- trạng thái rỗng -->
+    <div id="emptyState" class="empty">
+      <p class="empty__title">Chưa chạy lần nào</p>
+      <p class="empty__body">
+        Tool sẽ gắn file .mdf vào SQL Server trên máy, đọc toàn bộ cấu trúc và dữ liệu,
+        rồi xuất ra một file .sql chạy lại được từ đầu đến cuối.
+      </p>
+    </div>
+
+    <!-- đang chạy -->
+    <div id="progressBox" hidden>
+      <div class="progress">
+        <div class="progress__head">
+          <span id="progressStage">Đang chuẩn bị</span>
+          <span id="progressPct" class="mono">0%</span>
+        </div>
+        <div class="progress__track" role="progressbar" aria-valuemin="0" aria-valuemax="100"
+             aria-valuenow="0" id="progressBar">
+          <div id="progressFill" class="progress__fill"></div>
+        </div>
+      </div>
+      <ol id="log" class="log" aria-live="polite"></ol>
+    </div>
+
+    <!-- lỗi -->
+    <div id="errorBox" class="notice notice--danger" hidden>
+      <p class="notice__title">Không chuyển đổi được</p>
+      <p id="errorText" class="notice__body"></p>
+    </div>
+
+    <!-- kết quả -->
+    <div id="resultBox" hidden>
+      <div class="stats">
+        <div class="stat"><span class="stat__num mono" id="stTables">0</span><span class="stat__lbl">bảng</span></div>
+        <div class="stat"><span class="stat__num mono" id="stRows">0</span><span class="stat__lbl">dòng</span></div>
+        <div class="stat"><span class="stat__num mono" id="stSize">0</span><span class="stat__lbl">dung lượng</span></div>
+        <div class="stat"><span class="stat__num mono" id="stTime">0</span><span class="stat__lbl">giây</span></div>
+      </div>
+
+      <div class="outfile">
+        <div class="outfile__path mono" id="outFilePath"></div>
+        <div class="outfile__acts">
+          <button id="openFolder" class="btn btn--outline btn--sm" type="button">Mở thư mục</button>
+          <button id="copyPath" class="btn btn--ghost btn--sm" type="button">Chép đường dẫn</button>
+        </div>
+      </div>
+
+      <div id="warnBox" hidden>
+        <h3 class="subhead">Ghi chú cần đọc</h3>
+        <ul id="warnList" class="warnlist"></ul>
+      </div>
+
+      <h3 class="subhead">Chi tiết từng bảng</h3>
+      <table class="table">
+        <thead>
+          <tr><th scope="col">Bảng</th><th scope="col" class="num">Số dòng</th><th scope="col">Trạng thái</th></tr>
+        </thead>
+        <tbody id="tableRows"></tbody>
+      </table>
+
+      <details id="detailBox" class="guide" hidden>
+        <summary>Chi tiết kỹ thuật</summary>
+        <ul id="detailList" class="detaillist"></ul>
+      </details>
+
+      <details class="guide">
+        <summary>Cách import file .sql này vào SQL Server</summary>
+        <ol class="guide__steps">
+          <li>Mở SQL Server Management Studio, chọn <span class="mono">File &gt; Open &gt; File</span>, chọn file .sql rồi bấm Execute (F5).</li>
+          <li>Hoặc chạy dòng lệnh:
+            <code class="code mono" id="cmdLine"></code>
+          </li>
+        </ol>
+      </details>
+    </div>
+  </section>
+</main>
+
+<script src="/app.js"></script>
+</body>
+</html>

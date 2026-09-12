@@ -1,0 +1,12 @@
+"""mdf2sql - Chuyen doi file SQL Server .mdf thanh script .sql import duoc.
+
+Package nay gom cac module:
+    dbconn     : do tim instance SQL Server tren may va mo ket noi
+    attacher   : copy .mdf ra vung lam viec roi attach vao SQL Server
+    introspect : doc schema (bang, cot, khoa, index, view, proc...) tu sys.*
+    emit       : sinh script T-SQL (DDL + INSERT) import lai khong loi
+    convert    : dieu phoi toan bo quy trinh mdf -> sql
+    server     : web GUI chay tren localhost
+"""
+
+__version__ = "1.0.0"

@@ -1,0 +1,20 @@
+# Du lieu khach hang: KHONG BAO GIO commit
+mdf_test/
+samples/
+work/
+out/
+*.mdf
+*.ldf
+*.ndf
+*.bak
+*.sql
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# He dieu hanh
+Thumbs.db
+desktop.ini
