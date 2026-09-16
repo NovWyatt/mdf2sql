@@ -55,6 +55,8 @@ def _cmd_convert(args) -> int:
     if not out:
         info = dbconn.mdf_boot_info(args.mdf)
         base = info["db_name"] or os.path.splitext(os.path.basename(args.mdf))[0]
+        if args.dialect == "mysql":
+            base += "_mysql"
         out = os.path.join(os.path.dirname(os.path.abspath(args.mdf)),
                            "mdf2sql_output", base + ".sql")
 
@@ -65,6 +67,8 @@ def _cmd_convert(args) -> int:
         auto_repair=not args.no_repair,
         skip_blobs=args.skip_blobs,
         target_db=args.target_db or "",
+        dialect=args.dialect,
+        gzip_output=args.gzip,
     )
 
     last = [""]
@@ -130,6 +134,11 @@ def main(argv=None) -> int:
     p_conv.add_argument("--no-repair", action="store_true",
                         help="khong tu dong sua loi cau truc")
     p_conv.add_argument("--skip-blobs", action="store_true", help="bo qua cot nhi phan lon")
+    p_conv.add_argument("--dialect", choices=("mssql", "mysql"), default="mssql",
+                        help="mssql = nap lai vao SQL Server (mac dinh), "
+                             "mysql = nap vao MySQL/MariaDB/phpMyAdmin")
+    p_conv.add_argument("--gzip", action="store_true",
+                        help="nen file thanh .sql.gz, phpMyAdmin nap truc tiep duoc")
     p_conv.set_defaults(func=_cmd_convert)
 
     args = parser.parse_args(argv)

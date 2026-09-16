@@ -67,6 +67,8 @@ def _run_job(job_id: str, payload: dict) -> None:
             auto_repair=bool(payload.get("auto_repair", True)),
             skip_blobs=bool(payload.get("skip_blobs", False)),
             target_db=(payload.get("target_db") or "").strip(),
+            dialect=("mysql" if payload.get("dialect") == "mysql" else "mssql"),
+            gzip_output=bool(payload.get("gzip_output", False)),
         )
         rep = convert.convert_mdf(payload["path"], payload["out"], opts=opts, progress=progress)
         _update(job_id, percent=100, message="Hoàn tất", done=True, report={

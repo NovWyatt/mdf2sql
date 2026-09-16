@@ -2,7 +2,7 @@
 "use strict";
 
 const $ = (id) => document.getElementById(id);
-const state = { jobId: null, timer: null, report: null };
+const state = { jobId: null, timer: null, report: null, suggestOut: "" };
 
 /* ---------- tien ich ---------- */
 
@@ -101,7 +101,8 @@ async function inspect(path) {
     }
     show(card, true);
 
-    if (!$("outPath").value.trim()) $("outPath").value = info.suggest_out;
+    state.suggestOut = info.suggest_out || "";
+    if (!$("outPath").value.trim()) $("outPath").value = suggestOut();
     if (!$("targetDb").value.trim()) $("targetDb").placeholder = info.db_name || "Giữ nguyên tên gốc";
     setReady(true);
   } catch (err) {
@@ -110,6 +111,33 @@ async function inspect(path) {
     $("runHint").textContent = err.message;
   }
 }
+
+/* ---------- he quan tri dich ---------- */
+
+function dialect() {
+  const on = document.querySelector('input[name="dialect"]:checked');
+  return on ? on.value : "mssql";
+}
+
+// Ten file goi y phai khac nhau giua hai he, khong thi ban sau de ghi de ban truoc.
+function suggestOut() {
+  if (!state.suggestOut) return "";
+  if (dialect() !== "mysql") return state.suggestOut;
+  return state.suggestOut.replace(/\.sql$/i, "_mysql.sql");
+}
+
+function syncDialect() {
+  show($("optGzipRow"), dialect() === "mysql");
+  const box = $("outPath").value.trim();
+  // Chi sua giup khi o duong dan van dang la goi y cua tool, khong dung vao
+  // duong dan nguoi dung tu chon.
+  const auto = [state.suggestOut,
+                state.suggestOut.replace(/\.sql$/i, "_mysql.sql"), ""];
+  if (auto.indexOf(box) >= 0) $("outPath").value = suggestOut();
+}
+
+document.querySelectorAll('input[name="dialect"]').forEach(
+  (el) => el.addEventListener("change", syncDialect));
 
 function setReady(ok) {
   $("runBtn").disabled = !ok;
@@ -149,6 +177,8 @@ $("runBtn").addEventListener("click", async () => {
     drop_if_exists: $("optDrop").checked,
     auto_repair: $("optRepair").checked,
     skip_blobs: $("optSkipBlob").checked,
+    dialect: dialect(),
+    gzip_output: dialect() === "mysql" && $("optGzip").checked,
   };
   show($("emptyState"), false);
   show($("resultBox"), false);
@@ -215,8 +245,14 @@ function succeed(rep) {
   $("stSize").textContent = humanSize(rep.bytes_written);
   $("stTime").textContent = rep.seconds.toFixed(1);
   $("outFilePath").textContent = rep.out_path;
+  const my = dialect() === "mysql";
+  show($("guideMssql"), !my);
+  show($("guideMysql"), my);
   $("cmdLine").textContent =
     'sqlcmd -S .\\SQLEXPRESS -E -f 65001 -i "' + rep.out_path + '"';
+  $("cmdLineMy").textContent = rep.out_path.toLowerCase().endsWith(".gz")
+    ? 'gzip -dc "' + rep.out_path + '" | mysql -u root -p'
+    : 'mysql -u root -p < "' + rep.out_path + '"';
 
   const warnBox = $("warnBox"), warnList = $("warnList");
   warnList.innerHTML = "";

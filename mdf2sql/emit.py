@@ -170,7 +170,9 @@ class ScriptWriter:
         self.fh.write(("," + NL).join(values) + ";" + NL)
 
     def section(self, title: str) -> None:
-        bar = "-" * 74
+        # Duong ke phai bat dau bang "-- ": MySQL doi dau gach doi co khoang trang
+        # theo sau moi coi la chu thich, mot hang toan dau gach se thanh loi cu phap.
+        bar = "-- " + "-" * 70
         self.fh.write(NL + bar + NL + "-- " + title + NL + bar + NL)
 
 

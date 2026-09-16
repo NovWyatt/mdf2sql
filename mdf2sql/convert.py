@@ -3,18 +3,16 @@
 from __future__ import annotations
 
 import datetime
+import gzip
 import os
 import time
 from dataclasses import dataclass, field
 
-from . import attacher, dbconn, introspect
+from . import attacher, dbconn, introspect, mysql, reader
 from .emit import (MAX_ROWS_PER_INSERT, NL, ScriptWriter, column_ddl, find_duplicate_keys,
                    find_orphan_rows, insertable_columns, literal, q, qn)
 from .introspect import is_binary_blob
 
-# Kieu can doc duoi dang khac de khong mat do chinh xac.
-_AS_TEXT = {"datetime2", "datetimeoffset", "time"}
-_AS_BINARY_UDT = {"geometry", "geography", "hierarchyid"}
 
 
 @dataclass
@@ -30,6 +28,8 @@ class Options:
     auto_repair: bool = True            # tu dong sua loi cau truc neu CHECKDB bao loi
     exclude_tables: list = field(default_factory=list)   # "schema.table" bo qua
     max_rows_per_table: int = 0         # 0 = xuat het
+    dialect: str = "mssql"              # "mssql" = SQL Server, "mysql" = MySQL/MariaDB
+    gzip_output: bool = False           # nen .gz de vuot gioi han tai len cua phpMyAdmin
 
 
 @dataclass
@@ -58,65 +58,6 @@ def _noop(*_args, **_kwargs):
     return None
 
 
-def _size_limit(col: dict):
-    """Kich thuoc toi da cua cot, tinh theo don vi ma Python dem duoc (None = khong gioi han).
-
-    Du lieu hop le luon nam trong gioi han nay. Gia tri vuot nguong chi xuat hien khi
-    doc trung trang bi hong - do la dong rac, can tach ra de file chinh import sach.
-    """
-    tn = (col["type_name"] or "").lower()
-    max_len = col["max_length"]
-    if not max_len or max_len < 0:
-        return None
-    if tn in ("nchar", "nvarchar"):
-        return int(max_len) // 2
-    if tn in ("char", "varchar", "binary", "varbinary"):
-        return int(max_len)
-    return None
-
-
-def _select_plan(cols: list, opts: Options):
-    """Chon cach doc tung cot + cach viet lai thanh literal."""
-    exprs, kinds, names, limits = [], [], [], []
-    for c in cols:
-        tn = (c["type_name"] or "").lower()
-        name = c["name"]
-        if opts.skip_blobs and is_binary_blob(c):
-            continue
-        limits.append(_size_limit(c))
-        if tn in _AS_TEXT:
-            exprs.append("CONVERT(varchar(34), " + q(name) + ", 126)")
-            kinds.append("text")
-        elif tn in _AS_BINARY_UDT:
-            exprs.append("CAST(" + q(name) + " AS varbinary(max))")
-            kinds.append("udt:" + tn)
-        elif tn == "xml":
-            exprs.append("CONVERT(nvarchar(max), " + q(name) + ")")
-            kinds.append("nvarchar")
-        elif tn == "sql_variant":
-            exprs.append("CONVERT(nvarchar(max), " + q(name) + ")")
-            kinds.append("nvarchar")
-        else:
-            exprs.append(q(name))
-            kinds.append(tn)
-        names.append(name)
-    return exprs, kinds, names, limits
-
-
-def _row_fits(row, limits) -> bool:
-    """Dong co gia tri vuot kich thuoc cot -> du lieu rac tu trang hong."""
-    for value, limit in zip(row, limits):
-        if limit is None or value is None:
-            continue
-        if isinstance(value, str):
-            if len(value) > limit:
-                return False
-        elif isinstance(value, (bytes, bytearray, memoryview)):
-            if len(bytes(value)) > limit:
-                return False
-    return True
-
-
 def _value_sql(value, kind: str) -> str:
     """Doi 1 o du lieu thanh doan SQL."""
     if value is None:
@@ -141,10 +82,31 @@ def generate_script(conn, model: dict, out_path: str, opts: Options,
               if (t["schema"] + "." + t["table"]).lower() not in excluded]
     rep.tables = len(tables)
 
+    if opts.gzip_output and not out_path.lower().endswith(".gz"):
+        out_path += ".gz"
+        rep.out_path = out_path
+
     os.makedirs(os.path.dirname(os.path.abspath(out_path)) or ".", exist_ok=True)
-    # UTF-8 co BOM: SSMS va sqlcmd moi doc dung tieng Viet co dau.
-    # newline="": tu ghi '\r\n', khong de Python dong vao ky tu xuong dong cua du lieu.
-    with open(out_path, "w", encoding="utf-8-sig", newline="") as fh:
+    # SQL Server: UTF-8 CO BOM thi SSMS va sqlcmd moi doc dung tieng Viet.
+    # MySQL: KHONG duoc co BOM, phpMyAdmin se bao loi cu phap ngay dong dau tien.
+    # newline="": tu ghi xuong dong, khong de Python dong vao ky tu trong DU LIEU.
+    encoding = "utf-8" if opts.dialect == "mysql" else "utf-8-sig"
+    if opts.gzip_output:
+        opener = lambda: gzip.open(out_path, "wt", encoding=encoding, newline="")
+    else:
+        opener = lambda: open(out_path, "w", encoding=encoding, newline="")
+
+    if opts.dialect == "mysql":
+        with opener() as fh:
+            mysql.write_script(conn, model, out_path, opts, rep, progress, fh)
+        if rep.rejected_rows:
+            rep.rejected_path = _write_rejected(out_path, rep)
+        rep.bytes_written = os.path.getsize(out_path)
+        rep.seconds = time.time() - started
+        rep.ok = True
+        return rep
+
+    with opener() as fh:
         w = ScriptWriter(fh)
         _write_header(w, model, opts, tables)
 
@@ -188,7 +150,8 @@ def generate_script(conn, model: dict, out_path: str, opts: Options,
 
 def _write_rejected(out_path: str, rep: Report) -> str:
     """Ghi rieng cac dong bi loai ra 1 file de nguoi dung tu xem xet."""
-    base, ext = os.path.splitext(out_path)
+    base = out_path[:-3] if out_path.lower().endswith(".gz") else out_path
+    base, ext = os.path.splitext(base)
     path = base + "_dong-loi" + (ext or ".sql")
     with open(path, "w", encoding="utf-8-sig", newline="") as fh:
         w = ScriptWriter(fh)
@@ -284,39 +247,6 @@ def _write_tables(w: ScriptWriter, tables: list, db_collation, opts: Options) ->
         w.go()
 
 
-def _clustered_key(table: dict) -> list:
-    """Cot khoa cua chi muc clustered - dung de doc tiep sau khi gap trang hong."""
-    for k in table["keys"]:
-        if k["type_desc"] == "CLUSTERED":
-            return [c for c, _ in k["columns"]]
-    for i in table["indexes"]:
-        if i["type_desc"] == "CLUSTERED":
-            return [c for c, _ in i["key_columns"]]
-    return []
-
-
-def _keyset_where(key_cols: list) -> str:
-    """Dieu kien 'lon hon bo khoa da doc' theo kieu keyset pagination.
-
-    Vi du voi khoa (a, b):  (a > ?) OR (a = ? AND b > ?)
-    """
-    clauses = []
-    for i in range(len(key_cols)):
-        parts = [q(key_cols[j]) + " = ?" for j in range(i)]
-        parts.append(q(key_cols[i]) + " > ?")
-        clauses.append("(" + " AND ".join(parts) + ")")
-    return " OR ".join(clauses)
-
-
-def _keyset_args(values: list) -> list:
-    """Danh sach tham so khop voi _keyset_where."""
-    args = []
-    for i in range(len(values)):
-        args.extend(values[:i])
-        args.append(values[i])
-    return args
-
-
 def _write_data(w: ScriptWriter, conn, tables: list, opts: Options,
                 rep: Report, progress) -> None:
     w.section("5. Dữ liệu")
@@ -332,121 +262,44 @@ def _write_data(w: ScriptWriter, conn, tables: list, opts: Options,
 
 def _write_one_table(w: ScriptWriter, conn, t: dict, opts: Options,
                      rep: Report, batch_rows: int) -> None:
-    """Xuat du lieu 1 bang. Gap trang hong thi giu phan da doc va doc tiep neu co the."""
+    """Xuat du lieu 1 bang ra dang T-SQL."""
     cols = insertable_columns(t)
-    exprs, kinds, names, limits = _select_plan(cols, opts)
+    exprs, kinds, names, limits = reader.select_plan(cols, opts.skip_blobs)
     if not names:
         return
     full = qn(t["schema"], t["table"])
     label = t["schema"] + "." + t["table"]
     has_identity = any(c["is_identity"] for c in cols)
-
-    # Vi tri cac cot khoa trong ket qua - de biet doc tiep tu dau khi gap loi.
-    key_cols = _clustered_key(t)
-    key_pos = [names.index(k) for k in key_cols if k in names]
-    can_resume = len(key_pos) == len(key_cols) and bool(key_cols)
-
-    top = "TOP (" + str(opts.max_rows_per_table) + ") " if opts.max_rows_per_table else ""
-    base_select = "SELECT " + top + ", ".join(exprs) + " FROM " + full
     col_list = "(" + ", ".join(q(n) for n in names) + ")"
+    header_written = [False]
 
-    state = {"header": False, "count": 0, "last_key": None, "rejected": 0}
-
-    def flush(rows):
-        if can_resume:
-            state["last_key"] = [rows[-1][p] for p in key_pos]
-
-        good = [r for r in rows if _row_fits(r, limits)]
-        if len(good) != len(rows):
-            for bad in rows:
-                if _row_fits(bad, limits):
-                    continue
-                state["rejected"] += 1
-                if len(rep.rejected_rows) < 2000:
-                    rep.rejected_rows.append({
-                        "table": label, "columns": col_list,
-                        "values": "(" + ", ".join(_value_sql(v, k)
-                                                  for v, k in zip(bad, kinds)) + ")",
-                    })
-        if not good:
-            return
-
-        if not state["header"]:
+    def on_rows(rows):
+        if not header_written[0]:
             w.write("PRINT N'  -> " + label + "';")
             if has_identity:
                 w.write("SET IDENTITY_INSERT " + full + " ON;")
-            state["header"] = True
+            header_written[0] = True
         buf = ["(" + ", ".join(_value_sql(v, k) for v, k in zip(row, kinds)) + ")"
-               for row in good]
+               for row in rows]
         w.rows("INSERT INTO " + full + " " + col_list + " VALUES", buf)
         w.go()
-        state["count"] += len(good)
 
-    def stream(sql, args=None):
-        """Doc het 1 truy van, tra ve True neu doc tron ven."""
-        cur = conn.cursor()
-        cur.execute(sql, *(args or []))
-        while True:
-            rows = cur.fetchmany(batch_rows)
-            if not rows:
-                return True
-            flush(rows)
+    keep = max(0, 2000 - len(rep.rejected_rows))
+    res = reader.read_table(conn, t, exprs, names, limits, batch_rows, on_rows,
+                            max_rows=opts.max_rows_per_table, keep_bad=keep)
 
-    completed = False
-    failure = ""
-    try:
-        completed = stream(base_select)
-    except Exception as exc:
-        failure = _short(exc)
+    for bad in res.bad_rows:
+        rep.rejected_rows.append({
+            "table": label, "columns": col_list,
+            "values": "(" + ", ".join(_value_sql(v, k)
+                                      for v, k in zip(bad, kinds)) + ")",
+        })
 
-    # Doc lai tu ban ghi cuoi cung doc duoc. Truy van co WHERE khoa se di thang tu
-    # goc cay chi muc xuong, nen co co hoi khong cham lai trang bi hong.
-    attempts = 0
-    while not completed and can_resume and state["last_key"] and attempts < 3:
-        attempts += 1
-        before = state["count"]
-        sql = (base_select + " WHERE " + _keyset_where(key_cols) +
-               " ORDER BY " + ", ".join(q(c) for c in key_cols))
-        try:
-            completed = stream(sql, _keyset_args(state["last_key"]))
-        except Exception as exc:
-            failure = _short(exc)
-        if state["count"] == before:
-            break          # khong tien them duoc dong nao nua
-
-    if state["header"] and has_identity:
+    if header_written[0] and has_identity:
         w.write("SET IDENTITY_INSERT " + full + " OFF;")
         w.go()
 
-    if not completed:
-        estimate = t["row_count"]
-        msg = (label + ": chỉ đọc được " + f"{state['count']:,}" + " dòng trên ước tính " +
-               f"{estimate:,}" + " vì gặp trang dữ liệu bị hỏng. " + failure)
-        rep.warnings.append(msg)
-        w.write("-- CẢNH BÁO: " + msg)
-        w.write()
-
-    if state["rejected"]:
-        msg = (label + ": bỏ qua " + f"{state['rejected']:,}" + " dòng có giá trị vượt "
-               "kích thước cột, đây là dữ liệu rác từ trang hỏng. Xem file *_dong-loi.sql.")
-        rep.warnings.append(msg)
-        w.write("-- CANH BAO: " + msg)
-        w.write()
-
-    rep.rows += state["count"]
-    rep.rejected += state["rejected"]
-    rep.table_stats.append({
-        "table": label, "rows": state["count"], "rejected": state["rejected"],
-        "expected": t["row_count"], "complete": completed,
-    })
-
-
-def _short(exc: Exception) -> str:
-    text = str(exc)
-    marker = "[SQL Server]"
-    if marker in text:
-        text = text.split(marker)[-1]
-    return text.split("(SQLFetch")[0].strip()[:200]
+    reader.note_result(w, t, label, res, rep)
 
 
 def _write_keys(w: ScriptWriter, conn, tables: list, rep: Report, progress) -> None:

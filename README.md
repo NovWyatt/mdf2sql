@@ -1,7 +1,8 @@
 # mdf2sql
 
 Công cụ khôi phục dữ liệu SQL Server: đọc file `.mdf` và xuất ra file `.sql` chạy
-lại được từ đầu đến cuối mà không báo lỗi.
+lại được từ đầu đến cuối mà không báo lỗi — nạp ngược vào **SQL Server**, hoặc sang
+**MySQL / MariaDB / phpMyAdmin**.
 
 Viết cho tình huống thực tế của hệ thống bãi xe: máy tính ở bãi mất điện hoặc treo,
 SQL Server không khởi động lại được, chỉ còn lại file `.mdf` trong ổ đĩa và thường
@@ -13,6 +14,8 @@ là **không có file log `.ldf`**.
 - Tự phát hiện và sửa lỗi cấu trúc bằng `DBCC CHECKDB` khi file có trang dữ liệu hỏng.
 - Xuất ra file `.sql` gồm đầy đủ bảng, dữ liệu, khoá chính, index, khoá ngoại,
   view, thủ tục, trigger, sắp xếp đúng thứ tự để import không vướng phụ thuộc.
+- Xuất được **hai loại cú pháp**: T-SQL cho SQL Server, hoặc MySQL/MariaDB cho
+  phpMyAdmin. Chọn ngay trên giao diện, hoặc bằng `--dialect mysql`.
 - Giữ nguyên tiếng Việt có dấu, giá trị ngày giờ và số tiền đúng đến từng đơn vị.
 - **Không bao giờ đụng vào file gốc.** Mọi thao tác chạy trên bản sao.
 
@@ -63,6 +66,8 @@ Các tuỳ chọn hay dùng:
 | `--skip-blobs` | bỏ cột nhị phân lớn cho file nhẹ đi |
 | `--no-repair` | không tự động sửa lỗi cấu trúc |
 | `--server .\SQLEXPRESS` | chỉ định instance SQL Server cụ thể |
+| `--dialect mysql` | xuất cú pháp MySQL/MariaDB thay vì T-SQL |
+| `--gzip` | nén thành `.sql.gz`, phpMyAdmin nạp thẳng được |
 
 ## Import file .sql trở lại
 
@@ -73,6 +78,53 @@ sqlcmd -S .\SQLEXPRESS -E -f 65001 -i "D:\backup\giuxe.sql"
 ```
 
 File dùng mã UTF-8 kèm BOM nên tiếng Việt hiển thị đúng trong cả SSMS và sqlcmd.
+
+## Import sang MySQL / MariaDB / phpMyAdmin
+
+Chọn **MySQL / MariaDB** ở phần "Nơi bạn sẽ import file .sql" trên giao diện, hoặc:
+
+```bash
+python -m mdf2sql convert "D:\ITS\database\giuxe.mdf" -o "D:\backup\giuxe.sql" --dialect mysql --gzip
+```
+
+Rồi vào phpMyAdmin, tab **Import**, chọn file, bấm Go. File đã có sẵn lệnh
+`CREATE DATABASE` nên không cần tạo database trước. Hoặc chạy dòng lệnh:
+
+```bash
+mysql -u root -p < giuxe.sql
+```
+
+File MySQL **không có BOM** (có BOM là phpMyAdmin báo lỗi cú pháp ngay dòng đầu).
+Thêm `--gzip` khi file vượt `upload_max_filesize` của PHP: bộ dữ liệu 585 nghìn
+dòng nặng 86 MB rút còn 11 MB.
+
+### Chuyển kiểu dữ liệu sang MySQL
+
+| SQL Server | MySQL | Ghi chú |
+|---|---|---|
+| `nvarchar(n)` / `varchar(n)` | `VARCHAR(n)` | bảng dùng `utf8mb4`, tiếng Việt giữ nguyên |
+| `nvarchar(max)` / `text` | `LONGTEXT` | |
+| `datetime` | `DATETIME(3)` | giữ đủ mili giây |
+| `datetime2(n)` | `DATETIME(n)` | tối đa 6 chữ số |
+| `money` | `DECIMAL(19,4)` | |
+| `bit` | `TINYINT(1)` | |
+| `uniqueidentifier` | `CHAR(36)` | |
+| `varbinary(max)` / `image` | `LONGBLOB` | |
+| `IDENTITY(s,i)` | `AUTO_INCREMENT` | đặt lại mốc bằng `ALTER TABLE ... AUTO_INCREMENT` |
+
+Những thứ MySQL không có tương đương thì tool ghi ra dạng chú thích ở cuối file
+kèm lý do, thay vì bỏ im lặng: view, thủ tục, trigger, hàm, kiểu tự định nghĩa,
+ràng buộc `CHECK` dùng cú pháp riêng của SQL Server, cột tính toán.
+
+Vài khác biệt cần biết trước:
+
+- Tên bảng trong file giữ nguyên chữ hoa chữ thường, nhưng MySQL trên Windows mặc
+  định hạ hết về chữ thường (`lower_case_table_names=1`).
+- Tên dài quá 64 ký tự bị rút gọn kèm hậu tố băm để không trùng nhau.
+- Cột `char(n)` của SQL Server luôn được đệm dấu cách cho đủ `n`; MySQL cắt các dấu
+  cách cuối khi đọc ra. Nội dung thật không đổi.
+- Khoá chính, khoá ngoại và index được tạo **sau** khi đổ dữ liệu, nên file nạp
+  nhanh hơn và không vướng thứ tự phụ thuộc giữa các bảng.
 
 ## Tool xử lý file hỏng thế nào
 
@@ -115,6 +167,8 @@ mdf2sql/
   attacher.py   sao chép file ra vùng làm việc rồi gắn vào SQL Server
   introspect.py đọc schema từ các view hệ thống sys.*
   emit.py       chuyển giá trị Python thành literal T-SQL an toàn
+  mysql.py      sinh script MySQL/MariaDB: kiểu dữ liệu, literal, thứ tự câu lệnh
+  reader.py     đọc dữ liệu chịu được trang đĩa hỏng, dùng chung cho cả hai dialect
   convert.py    điều phối toàn bộ quy trình và sinh file .sql
   server.py     máy chủ web cục bộ cho giao diện
   cli.py        giao diện dòng lệnh

@@ -53,6 +53,27 @@
     </div>
 
     <div class="field">
+      <span class="label">Nơi bạn sẽ import file .sql</span>
+      <div class="seg" role="radiogroup" aria-label="Chọn hệ quản trị đích">
+        <label class="seg__opt">
+          <input type="radio" name="dialect" value="mssql" checked>
+          <span class="seg__box">
+            <strong>SQL Server</strong>
+            <em>SSMS, sqlcmd</em>
+          </span>
+        </label>
+        <label class="seg__opt">
+          <input type="radio" name="dialect" value="mysql">
+          <span class="seg__box">
+            <strong>MySQL / MariaDB</strong>
+            <em>phpMyAdmin, XAMPP</em>
+          </span>
+        </label>
+      </div>
+      <p class="help">Cú pháp hai bên khác hẳn nhau, chọn đúng nơi sẽ nạp thì file mới chạy được.</p>
+    </div>
+
+    <div class="field">
       <label class="label" for="outPath">Lưu file .sql vào</label>
       <div class="row">
         <input id="outPath" class="input" type="text" spellcheck="false"
@@ -88,6 +109,11 @@
           <input type="checkbox" id="optSkipBlob">
           <span><strong>Bỏ qua cột ảnh</strong>
             <em>Giảm dung lượng file khi database có lưu ảnh biển số.</em></span>
+        </label>
+        <label class="check" id="optGzipRow" hidden>
+          <input type="checkbox" id="optGzip">
+          <span><strong>Nén thành file .sql.gz</strong>
+            <em>phpMyAdmin nạp thẳng file nén, đỡ vướng giới hạn dung lượng tải lên.</em></span>
         </label>
       </div>
     </div>
@@ -173,12 +199,23 @@
         <ul id="detailList" class="detaillist"></ul>
       </details>
 
-      <details class="guide">
+      <details class="guide" id="guideMssql">
         <summary>Cách import file .sql này vào SQL Server</summary>
         <ol class="guide__steps">
           <li>Mở SQL Server Management Studio, chọn <span class="mono">File &gt; Open &gt; File</span>, chọn file .sql rồi bấm Execute (F5).</li>
           <li>Hoặc chạy dòng lệnh:
             <code class="code mono" id="cmdLine"></code>
+          </li>
+        </ol>
+      </details>
+
+      <details class="guide" id="guideMysql" hidden>
+        <summary>Cách import file .sql này vào phpMyAdmin</summary>
+        <ol class="guide__steps">
+          <li>Mở phpMyAdmin, vào tab <span class="mono">Import</span>, chọn file này rồi bấm Go. File đã có sẵn lệnh tạo database nên không cần tạo trước.</li>
+          <li>File lớn hơn mức <span class="mono">upload_max_filesize</span> của PHP thì bật thêm tuỳ chọn nén .gz ở cột bên trái, phpMyAdmin tự giải nén khi nạp.</li>
+          <li>Hoặc chạy dòng lệnh:
+            <code class="code mono" id="cmdLineMy"></code>
           </li>
         </ol>
       </details>
