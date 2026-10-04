@@ -1,0 +1,87 @@
+{
+  "$schema": "../../hub/schema/tool.schema.json",
+  "id": "mdf2sql",
+  "name": "Khôi phục file .mdf sang .sql",
+  "version": "2026.10",
+  "category": "chuyen-doi",
+  "icon": "database",
+  "audience": "tech",
+  "summary": "Đọc file cơ sở dữ liệu SQL Server .mdf, kể cả file tắt đột ngột hoặc thiếu .ldf, rồi xuất .sql nạp lại được vào SQL Server hoặc MySQL, MariaDB, phpMyAdmin.",
+  "description": "Viết cho hệ thống bãi xe khi SQL Server không khởi động lại được. Luôn làm trên bản sao, không đụng file gốc. Cần SQL Server (LocalDB hoặc Express), ODBC Driver 17/18 và thư viện pyodbc.",
+  "tags": ["SQL Server", "mdf", "sql", "MySQL", "phpMyAdmin", "khôi phục dữ liệu", "bãi xe", "LocalDB"],
+  "docs": "README.md",
+  "actions": [
+    {
+      "id": "giao-dien",
+      "label": "Mở giao diện chuyển đổi",
+      "file": "Chay_tool.bat",
+      "type": "console",
+      "risk": "modifies-system",
+      "primary": true,
+      "duration": "Chạy đến khi đóng cửa sổ; mỗi file vài chục giây đến vài phút",
+      "description": "Mở giao diện trên trình duyệt (127.0.0.1:8760) để chọn file .mdf và xuất .sql. Đóng cửa sổ dòng lệnh để tắt. Chỉ mở một lần: mở hai cửa sổ cùng lúc thì giao diện gọi nhầm máy chủ.",
+      "changes": [
+        "Lần đầu: cài thư viện pyodbc cho Python của tài khoản này (pip install --user)",
+        "Gắn tạm bản sao .mdf vào SQL Server rồi gỡ ra; bản sao làm việc ở C:\\Users\\Public\\mdf2sql_work"
+      ]
+    },
+    {
+      "id": "thong-tin",
+      "label": "Xem thông tin file .mdf",
+      "file": "CHAY_DONG_LENH.bat",
+      "type": "console",
+      "risk": "read-only",
+      "duration": "Vài giây",
+      "description": "Đọc tên database, phiên bản SQL Server đã tạo file và kiểm tra có file .ldf không. Không cần SQL Server.",
+      "fixedArgs": ["info"],
+      "args": [
+        { "id": "mdf", "type": "file", "required": true, "label": "File .mdf", "filter": "Cơ sở dữ liệu SQL Server|*.mdf" }
+      ]
+    },
+    {
+      "id": "chuyen-doi",
+      "label": "Chuyển đổi bằng dòng lệnh",
+      "file": "CHAY_DONG_LENH.bat",
+      "type": "console",
+      "risk": "modifies-system",
+      "duration": "Vài chục giây đến vài phút",
+      "description": "Chuyển .mdf thành .sql không cần trình duyệt. Kết quả lưu vào thư mục mdf2sql_output cạnh file .mdf.",
+      "fixedArgs": ["convert"],
+      "changes": ["Gắn tạm bản sao .mdf vào SQL Server rồi gỡ ra; file gốc không bị đổi"],
+      "args": [
+        { "id": "mdf", "type": "file", "required": true, "label": "File .mdf", "filter": "Cơ sở dữ liệu SQL Server|*.mdf" },
+        { "id": "dialect", "type": "choice", "flag": "--dialect", "label": "Sẽ nạp file .sql vào", "default": "mssql", "options": [
+          { "value": "mssql", "label": "SQL Server (T-SQL)" },
+          { "value": "mysql", "label": "MySQL, MariaDB, phpMyAdmin" }
+        ] },
+        { "id": "gzip", "type": "bool", "flag": "--gzip", "label": "Nén thành .sql.gz (phpMyAdmin nạp thẳng được)" },
+        { "id": "schema-only", "type": "bool", "flag": "--schema-only", "label": "Chỉ xuất cấu trúc bảng, bỏ dữ liệu" },
+        { "id": "skip-blobs", "type": "bool", "flag": "--skip-blobs", "label": "Bỏ cột nhị phân lớn cho file nhẹ đi" },
+        { "id": "server", "type": "text", "flag": "--server", "label": "Instance SQL Server", "placeholder": ".\\SQLEXPRESS", "help": "Bỏ trống để tự dò." }
+      ]
+    }
+  ],
+  "requires": [
+    { "id": "python", "type": "python", "min": "3.9", "label": "Python 3.9 trở lên", "fix": { "label": "Cài Python 3.12", "winget": "Python.Python.3.12", "args": "--scope user" } },
+    { "id": "pyodbc", "type": "pymodule", "module": "pyodbc", "optional": true, "label": "Thư viện pyodbc (tự cài khi chạy lần đầu)" },
+    { "id": "odbc", "type": "odbc", "label": "ODBC Driver 17/18 for SQL Server", "names": ["ODBC Driver 18 for SQL Server", "ODBC Driver 17 for SQL Server"], "fix": { "label": "Cài ODBC 18", "winget": "Microsoft.msodbcsql.18" } },
+    { "id": "sqlserver", "type": "sqlserver", "label": "SQL Server (LocalDB hoặc Express)", "fix": { "label": "Cài LocalDB", "hubScript": "Cai-SqlLocalDB.ps1", "admin": true } }
+  ],
+  "outputs": [
+    { "label": "File .sql cũ trong thư mục công cụ", "dir": "out", "glob": "*.sql;*.sql.gz" }
+  ],
+  "issues": [
+    "Cổng cố định 8760 và cho dùng chung cổng: mở 2 lần thì 2 máy chủ cùng nghe, giao diện gọi nhầm và báo 'Từ chối truy cập'.",
+    "Đóng cửa sổ khi đang chuyển: database tạm *__m2s_* còn gắn trong SQL Server và bản sao .mdf nằm lại ở C:\\Users\\Public\\mdf2sql_work.",
+    "Chay_tool.bat dùng 'where python' nên lối tắt Microsoft Store cũng qua được rồi báo lỗi mạng; pyodbc cài không khoá phiên bản vào Python chung.",
+    "Máy chỉ có driver ODBC cũ 'SQL Server' thì không kết nối được LocalDB mà không có gợi ý cách sửa.",
+    "Tạo cửa sổ chọn file (Tk) từ luồng HTTP: Tk không an toàn đa luồng, đôi khi làm sập tiến trình.",
+    "Chưa đặt setdecoding cho pyodbc: cột varchar không Unicode có thể sai dấu tiếng Việt (cần thử với dữ liệu thật)."
+  ],
+  "upgrades": [
+    "P0 – Lệnh 'mdf2sql doctor' kiểm tra pyodbc, driver ODBC, instance SQL và in cách sửa bằng tiếng Việt (Trạm Tool đã có nút cài ODBC 18 và LocalDB).",
+    "P0 – Không dùng chung cổng, tự lùi sang cổng trống, nhận --port 0, in URL thật và flush; thêm /api/health, /api/shutdown để Trạm Tool quản lý.",
+    "P1 – .venv riêng với pyodbc khoá phiên bản thay cho pip install --user; khi khởi động dọn database tạm và thư mục session_* bị bỏ lại.",
+    "P2 – Chọn instance trên giao diện; kết nối LocalDB qua named pipe khi chỉ có driver cũ; setdecoding cho varchar."
+  ]
+}
