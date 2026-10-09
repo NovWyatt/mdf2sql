@@ -110,7 +110,7 @@ def _cmd_gui(args) -> int:
 
 
 def _cmd_doctor(args) -> int:
-    return doctor.run(srv=args.server or "", connect=not args.no_connect, as_json=args.json)
+    return doctor.run(srv=args.server or "", connect=not args.no_connect, as_json=args.json, ket_qua=args.ket_qua or "")
 
 
 def _port(text: str) -> int:
@@ -139,7 +139,9 @@ def main(argv=None) -> int:
     p_doc = sub.add_parser("doctor", help="kiem tra pyodbc, driver ODBC, SQL Server; chi doc, khong sua")
     p_doc.add_argument("--server", help="instance can thu, vd .\\SQLEXPRESS (mac dinh: instance convert se dung)")
     p_doc.add_argument("--no-connect", action="store_true", help="khong thu ket noi SQL Server")
-    p_doc.add_argument("--json", action="store_true", help="in ket qua dang JSON")
+    p_doc.add_argument("--json", action="store_true", help="in ket qua dang JSON (chuan tramtool.ketqua/1)")
+    p_doc.add_argument("--ket-qua", nargs="?", const=doctor.default_result_dir(), default="", metavar="THU_MUC",
+                       help="ghi them file ket qua JSON vao THU_MUC (bo trong: %%LOCALAPPDATA%%\\mdf2sql\\ket_qua)")
     p_doc.set_defaults(func=_cmd_doctor)
 
     p_info = sub.add_parser("info", help="xem thong tin file .mdf, khong can SQL Server")

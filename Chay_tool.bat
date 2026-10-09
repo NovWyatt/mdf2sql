@@ -27,6 +27,8 @@ echo   Dong cua so nay de tat tool.
 echo.
 python -m mdf2sql gui
 set "RC=%errorlevel%"
+rem Tat binh thuong (Ctrl+C, nut Tat trong Tram Tool) thi dong cua so luon; loi thi dung lai de doc.
+if "%RC%"=="0" exit /b 0
 echo.
 pause
 exit /b %RC%

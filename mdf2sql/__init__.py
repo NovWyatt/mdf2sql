@@ -11,4 +11,4 @@ Package nay gom cac module:
     doctor     : kiem tra moi truong (pyodbc, driver ODBC, SQL Server)
 """
 
-__version__ = "1.1.1"
+__version__ = "1.2.0"

@@ -2,18 +2,23 @@
 va in cach sua bang tieng Viet. Chi doc, khong cai hay sua gi.
 
 Ma thoat: 0 du dieu kien, 2 thieu dieu kien (co muc [X]), 1 loi bat ngo.
+--json in va --ket-qua ghi ket qua theo chuan JSON cua Tram Tool (chuan: tramtool.ketqua/1).
 """
 
 from __future__ import annotations
 
+import datetime
 import json
 import os
+import re
 import socket
 import sys
 import urllib.request
 
 from . import __version__, attacher, dbconn, server
 
+RESULT_STANDARD = "tramtool.ketqua/1"
+LEVELS = {"ok": "ok", "info": "thong-tin", "warn": "canh-bao", "bad": "loi"}   # muc trong Report -> mucDo
 MODERN = ("ODBC Driver 18 for SQL Server", "ODBC Driver 17 for SQL Server")
 TRAM_ODBC = "nút 'Cài ODBC 18' ở trang công cụ trong Trạm Tool, hoặc: winget install Microsoft.msodbcsql.18"
 TRAM_LOCALDB = "nút 'Cài LocalDB' ở trang công cụ trong Trạm Tool (cần quyền Admin), hoặc cài SQL Server Express"
@@ -205,7 +210,50 @@ def _check_port(rep: Report) -> None:
         s.close()
 
 
-def run(srv: str = "", connect: bool = True, as_json: bool = False) -> int:
+def default_result_dir() -> str:
+    """Noi ghi file ket qua khi goi --ket-qua khong kem thu muc (canh server.json)."""
+    base = os.environ.get("LOCALAPPDATA") or os.path.expanduser("~")
+    return os.path.join(base, "mdf2sql", "ket_qua")
+
+
+def build_result(rep: Report, code: int, started: str) -> dict:
+    """Ket qua theo chuan JSON cua Tram Tool (tramtool.ketqua/1): Tram doc de hien 'tim thay gi'."""
+    found = [{"ma": i["ma"], "mucDo": LEVELS[i["muc"]], "tieuDe": i["tieu_de"],
+              "chiTiet": i["chi_tiet"], "cachSua": i["cach_sua"]} for i in rep.items]
+
+    def count(level: str) -> int:
+        return sum(1 for f in found if f["mucDo"] == level)
+
+    ok = code == 0
+    return {
+        "chuan": RESULT_STANDARD, "congCu": "mdf2sql", "cheDo": "doctor", "phienBan": __version__,
+        "may": os.environ.get("COMPUTERNAME", ""), "taiKhoan": os.environ.get("USERNAME", ""),
+        "batDau": started, "ketThuc": datetime.datetime.now().isoformat(timespec="seconds"),
+        "maThoat": code, "trangThai": "xong" if ok else "thieu-dieu-kien",
+        "ma": "DU_DIEU_KIEN" if ok else "THIEU_DIEU_KIEN",
+        "thongDiep": "Đủ điều kiện để chuyển đổi." if ok
+        else f"Thiếu {rep.bad} điều kiện: sửa theo cách sửa của từng mục rồi kiểm tra lại.",
+        "tomTat": {"loi": count("loi"), "canhBao": count("canh-bao"), "thongTin": count("thong-tin")},
+        "phatHien": found,
+    }
+
+
+def save_result(result: dict, folder: str) -> str:
+    """Ghi file KetQua_mdf2sql_doctor_<may>_<gio>.json vao folder (ghi file tam roi doi ten)."""
+    os.makedirs(folder, exist_ok=True)
+    host = re.sub(r"[^\w.-]", "_", result.get("may") or "may")
+    stamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    path = os.path.join(folder, f"KetQua_mdf2sql_doctor_{host}_{stamp}.json")
+    tmp = path + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as fh:
+        json.dump(result, fh, ensure_ascii=False, indent=2)
+    os.replace(tmp, path)
+    return path
+
+
+def run(srv: str = "", connect: bool = True, as_json: bool = False, ket_qua: str = "") -> int:
+    """ket_qua: thu muc ghi them file ket qua JSON (rong = khong ghi)."""
+    started = datetime.datetime.now().isoformat(timespec="seconds")
     rep = Report(quiet=as_json)
     if not as_json:
         print(f"mdf2sql {__version__}: kiểm tra môi trường", flush=True)
@@ -220,11 +268,19 @@ def run(srv: str = "", connect: bool = True, as_json: bool = False) -> int:
     _check_workspace(rep)
     _check_port(rep)
     code = 2 if rep.bad else 0
+    result = build_result(rep, code, started)
     if as_json:
-        print(json.dumps({"cong_cu": "mdf2sql", "phien_ban": __version__, "ma_thoat": code,
-                          "thieu": rep.bad, "muc": rep.items}, ensure_ascii=False, indent=2), flush=True)
+        print(json.dumps(result, ensure_ascii=False, indent=2), flush=True)
     elif rep.bad:
         print(f"\nThiếu {rep.bad} điều kiện: sửa theo hướng dẫn ở trên rồi chạy lại 'mdf2sql doctor'.", flush=True)
     else:
         print("\nĐủ điều kiện để chuyển đổi.", flush=True)
+    if ket_qua:
+        try:
+            path = save_result(result, ket_qua)
+            if not as_json:
+                print(f"Kết quả (JSON): {path}", flush=True)
+        except OSError as exc:
+            if not as_json:
+                print(f"Không ghi được file kết quả JSON: {exc}", flush=True)
     return code

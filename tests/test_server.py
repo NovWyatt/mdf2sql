@@ -52,6 +52,24 @@ class PortTest(unittest.TestCase):
             a.server_close()
 
 
+class DenyTest(unittest.TestCase):
+    def test_unauthorized_post_always_gets_403(self):
+        """Tu choi ma van doc het than yeu cau: khong thi Windows gui RST, ben goi mat cau tra loi 403."""
+        httpd = server.bind_server(0)
+        t = threading.Thread(target=httpd.serve_forever, daemon=True)
+        t.start()
+        try:
+            base = "http://127.0.0.1:%d" % httpd.server_address[1]
+            for _ in range(20):
+                code, body = post(base, "/api/convert", {"path": "x" * 32768})
+                self.assertEqual(code, 403)
+                self.assertIn("error", body)
+        finally:
+            httpd.shutdown()
+            httpd.server_close()
+            t.join(5)
+
+
 class ServeTest(unittest.TestCase):
     def test_health_shutdown_state_file(self):
         buf = io.StringIO()

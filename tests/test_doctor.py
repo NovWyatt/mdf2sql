@@ -19,7 +19,7 @@ def run_doctor(**kw):
 
 
 def codes(out_json):
-    return {i["ma"]: i["muc"] for i in json.loads(out_json)["muc"]}
+    return {i["ma"]: i["mucDo"] for i in json.loads(out_json)["phatHien"]}
 
 
 class FakeCur:
@@ -67,38 +67,38 @@ class DoctorTest(unittest.TestCase):
         code, out = run_doctor(connect=True, as_json=True)
         c = codes(out)
         self.assertEqual(code, 2)
-        self.assertEqual(c.get("ODBC_QUA_CU"), "bad")
+        self.assertEqual(c.get("ODBC_QUA_CU"), "loi")
         self.assertIn("CHUA_THU_KET_NOI", c)
 
     def test_driver_13_is_warning_only(self):
         dbconn.pyodbc.drivers = lambda: ["ODBC Driver 13 for SQL Server", "SQL Server"]
         code, out = run_doctor(connect=False, as_json=True)
-        self.assertEqual(codes(out).get("ODBC_CU"), "warn")
+        self.assertEqual(codes(out).get("ODBC_CU"), "canh-bao")
         self.assertEqual(code, 0)
 
     def test_no_driver(self):
         dbconn.pyodbc.drivers = lambda: []
         code, out = run_doctor(connect=False, as_json=True)
         self.assertEqual(code, 2)
-        self.assertEqual(codes(out).get("THIEU_ODBC"), "bad")
+        self.assertEqual(codes(out).get("THIEU_ODBC"), "loi")
 
     def test_no_pyodbc(self):
         dbconn.pyodbc = None
         code, out = run_doctor(connect=True, as_json=True)
         self.assertEqual(code, 2)
-        self.assertEqual(codes(out).get("THIEU_PYODBC"), "bad")
+        self.assertEqual(codes(out).get("THIEU_PYODBC"), "loi")
 
     def test_no_sql_server(self):
         dbconn.discover_instances = lambda: []
         code, out = run_doctor(connect=True, as_json=True)
         self.assertEqual(code, 2)
-        self.assertEqual(codes(out).get("THIEU_SQL"), "bad")
+        self.assertEqual(codes(out).get("THIEU_SQL"), "loi")
 
     def test_sql_server_stopped(self):
         dbconn.discover_instances = lambda: [dbconn.Instance(".\\SQLEXPRESS", "SQL Server (SQLEXPRESS)", "service", False)]
         code, out = run_doctor(connect=True, as_json=True)
         self.assertEqual(code, 2)
-        self.assertEqual(codes(out).get("SQL_TAT"), "bad")
+        self.assertEqual(codes(out).get("SQL_TAT"), "loi")
 
     def test_all_good(self):
         code, out = run_doctor(connect=True, as_json=True)
@@ -113,8 +113,8 @@ class DoctorTest(unittest.TestCase):
         code, out = run_doctor(connect=True, as_json=True)
         c = codes(out)
         self.assertEqual(code, 2)
-        self.assertEqual(c.get("THIEU_QUYEN_SQL"), "bad")
-        self.assertEqual(c.get("DB_TAM_SOT"), "warn")
+        self.assertEqual(c.get("THIEU_QUYEN_SQL"), "loi")
+        self.assertEqual(c.get("DB_TAM_SOT"), "canh-bao")
         self.assertEqual(c.get("KET_NOI"), "ok")
         self.assertTrue(fc.closed, "phai dong ket noi sau khi kiem tra")
 
@@ -124,7 +124,7 @@ class DoctorTest(unittest.TestCase):
         dbconn.connect = boom
         code, out = run_doctor(connect=True, as_json=True)
         self.assertEqual(code, 2)
-        self.assertEqual(codes(out).get("KHONG_KET_NOI"), "bad")
+        self.assertEqual(codes(out).get("KHONG_KET_NOI"), "loi")
 
     def test_leftover_workspace(self):
         ws = os.path.join(attacher.default_workspace(), "session_20261009_1200_abcd")
@@ -133,9 +133,41 @@ class DoctorTest(unittest.TestCase):
             with open(os.path.join(ws, "x.mdf"), "wb") as fh:
                 fh.write(b"\0" * 2048)
             code, out = run_doctor(connect=False, as_json=True)
-            self.assertEqual(codes(out).get("THU_MUC_SOT"), "warn")
+            self.assertEqual(codes(out).get("THU_MUC_SOT"), "canh-bao")
         finally:
             shutil.rmtree(ws, True)
+
+    def test_result_file_standard(self):
+        """--ket-qua: file JSON theo chuan Tram Tool, dem khop voi danh sach phat hien."""
+        folder = os.path.join(tests.TMP, "ket_qua_doctor")
+        shutil.rmtree(folder, True)
+        dbconn.pyodbc.drivers = lambda: []
+        code, out = run_doctor(connect=False, ket_qua=folder)
+        files = [f for f in os.listdir(folder) if f.startswith("KetQua_mdf2sql_doctor_") and f.endswith(".json")]
+        self.assertEqual(len(files), 1, files)
+        self.assertIn("Kết quả (JSON):", out)
+        with open(os.path.join(folder, files[0]), encoding="utf-8") as fh:
+            r = json.load(fh)
+        self.assertEqual(r["chuan"], "tramtool.ketqua/1")
+        self.assertEqual((r["congCu"], r["cheDo"], r["maThoat"]), ("mdf2sql", "doctor", code))
+        self.assertEqual(r["trangThai"], "thieu-dieu-kien" if code == 2 else "xong")
+        levels = [f["mucDo"] for f in r["phatHien"]]
+        self.assertTrue(set(levels) <= {"loi", "canh-bao", "thong-tin", "ok"}, levels)
+        self.assertEqual(r["tomTat"]["loi"], levels.count("loi"))
+        self.assertEqual(r["tomTat"]["canhBao"], levels.count("canh-bao"))
+        self.assertIn("THIEU_ODBC", [f["ma"] for f in r["phatHien"]])
+        self.assertTrue(r["thongDiep"])
+
+    def test_cli_ket_qua_default_dir(self):
+        """mdf2sql doctor --ket-qua (khong kem thu muc): ghi vao %LOCALAPPDATA%\\mdf2sql\\ket_qua."""
+        from mdf2sql import cli
+        folder = doctor.default_result_dir()
+        self.assertTrue(folder.startswith(os.environ["LOCALAPPDATA"]), folder)
+        shutil.rmtree(folder, True)
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            cli.main(["doctor", "--no-connect", "--ket-qua"])
+        self.assertEqual(len([f for f in os.listdir(folder) if f.endswith(".json")]), 1)
 
 
 class DbconnTest(unittest.TestCase):

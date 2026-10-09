@@ -2,7 +2,7 @@
   "$schema": "../../hub/schema/tool.schema.json",
   "id": "mdf2sql",
   "name": "Khôi phục file .mdf sang .sql",
-  "version": "2026.10.2",
+  "version": "2026.10.3",
   "category": "chuyen-doi",
   "icon": "database",
   "audience": "tech",
@@ -18,8 +18,9 @@
       "type": "console",
       "risk": "modifies-system",
       "primary": true,
+      "webServer": { "stateFile": "%LOCALAPPDATA%\\mdf2sql\\server.json", "app": "mdf2sql" },
       "duration": "Chạy đến khi đóng cửa sổ; mỗi file vài chục giây đến vài phút",
-      "description": "Mở giao diện trên trình duyệt (127.0.0.1, cổng 8760 hoặc cổng trống kế tiếp nếu đang bận) để chọn file .mdf và xuất .sql. Đóng cửa sổ dòng lệnh để tắt.",
+      "description": "Mở giao diện trên trình duyệt (127.0.0.1, cổng 8760 hoặc cổng trống kế tiếp nếu đang bận) để chọn file .mdf và xuất .sql. Đóng cửa sổ dòng lệnh để tắt. Giao diện đang chạy thì Trạm Tool mở lại trang đó thay vì mở thêm.",
       "changes": [
         "Lần đầu: cài thư viện pyodbc 5.x cho Python của tài khoản này (pip install --user -r requirements.txt)",
         "Gắn tạm bản sao .mdf vào SQL Server rồi gỡ ra; bản sao làm việc ở C:\\Users\\Public\\mdf2sql_work"
@@ -32,8 +33,8 @@
       "type": "console",
       "risk": "read-only",
       "duration": "Vài giây",
-      "description": "Lệnh doctor: kiểm tra Python, pyodbc, driver ODBC, SQL Server (kết nối thử, quyền tạo database), database tạm và thư mục làm việc còn sót, cổng giao diện; in cách sửa từng mục thiếu. Không cài, không sửa gì.",
-      "fixedArgs": ["doctor"]
+      "description": "Lệnh doctor: kiểm tra Python, pyodbc, driver ODBC, SQL Server (kết nối thử, quyền tạo database), database tạm và thư mục làm việc còn sót, cổng giao diện; in cách sửa từng mục thiếu. Không cài, không sửa gì. Kết quả ghi thêm vào %LOCALAPPDATA%\\mdf2sql\\ket_qua để Trạm Tool hiện từng mục.",
+      "fixedArgs": ["doctor", "--ket-qua"]
     },
     {
       "id": "thong-tin",
@@ -78,7 +79,8 @@
     { "id": "sqlserver", "type": "sqlserver", "label": "SQL Server (LocalDB hoặc Express)", "fix": { "label": "Cài LocalDB", "hubScript": "Cai-SqlLocalDB.ps1", "admin": true } }
   ],
   "outputs": [
-    { "label": "File .sql cũ trong thư mục công cụ", "dir": "out", "glob": "*.sql;*.sql.gz" }
+    { "label": "File .sql cũ trong thư mục công cụ", "dir": "out", "glob": "*.sql;*.sql.gz" },
+    { "label": "Kết quả kiểm tra máy (doctor)", "dir": "%LOCALAPPDATA%\\mdf2sql\\ket_qua", "glob": "KetQua_mdf2sql_doctor_%COMPUTERNAME%_*.json", "ketQua": true }
   ],
   "issues": [
     "Đóng cửa sổ khi đang chuyển: database tạm *__m2s_* còn gắn trong SQL Server và bản sao .mdf nằm lại ở C:\\Users\\Public\\mdf2sql_work.",
@@ -86,7 +88,6 @@
     "Chưa đặt setdecoding cho pyodbc: cột varchar không Unicode có thể sai dấu tiếng Việt (cần thử với dữ liệu thật)."
   ],
   "upgrades": [
-    "P1: Trạm Tool đọc %LOCALAPPDATA%\\mdf2sql\\server.json: mở lại giao diện đang chạy thay vì mở thêm, nút tắt (/api/shutdown); hiện kết quả doctor --json.",
     "P1: .venv riêng với pyodbc khoá phiên bản thay cho pip install --user; khi khởi động dọn database tạm và thư mục session_* bị bỏ lại.",
     "P2: Chọn instance trên giao diện; kết nối LocalDB qua named pipe khi chỉ có driver cũ; setdecoding cho varchar."
   ]

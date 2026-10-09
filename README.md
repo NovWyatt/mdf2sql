@@ -50,7 +50,11 @@ python -m mdf2sql doctor
 ```
 
 `--server .\SQLEXPRESS` thử một instance cụ thể, `--no-connect` bỏ bước kết nối,
-`--json` in kết quả dạng JSON. Mã thoát: 0 đủ điều kiện, 2 còn thiếu, 1 lỗi bất ngờ.
+`--json` in kết quả dạng JSON, `--ket-qua [THU_MUC]` ghi thêm file
+`KetQua_mdf2sql_doctor_<máy>_<giờ>.json` (bỏ trống thư mục: `%LOCALAPPDATA%\mdf2sql\ket_qua`).
+Cả hai theo chuẩn kết quả của Trạm Tool (`tramtool.ketqua/1`: `maThoat`, `trangThai`, `tomTat`, `phatHien` với
+`ma`, `mucDo`, `tieuDe`, `chiTiet`, `cachSua`), nên Trạm hiện được các mục còn thiếu. Mã thoát: 0 đủ điều kiện,
+2 còn thiếu, 1 lỗi bất ngờ.
 
 ## Cách dùng
 
@@ -63,6 +67,9 @@ Giao diện dùng cổng 8760; cổng đó đang bận (đã mở tool ở cửa
 đang dùng) thì tự dùng cổng kế tiếp và in địa chỉ thật ra cửa sổ dòng lệnh. Mỗi cửa sổ
 giữ riêng cổng của nó. `python -m mdf2sql gui --port 0` để hệ điều hành chọn cổng,
 `--no-browser` để không mở trình duyệt.
+
+Tắt bình thường (Ctrl+C, nút *Tắt* trong Trạm Tool) thì cửa sổ của `Chay_tool.bat` tự đóng; lỗi thì cửa sổ
+dừng lại để đọc. Mở từ Trạm Tool khi giao diện đang chạy thì Trạm mở lại trang cũ thay vì chạy thêm máy chủ.
 
 ### Dòng lệnh
 

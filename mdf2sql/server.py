@@ -153,6 +153,16 @@ class Handler(BaseHTTPRequestHandler):
         query = parse_qs(urlparse(self.path).query)
         return query.get("k", [""])[0] == TOKEN
 
+    def _drain(self, limit: int = 65536) -> None:
+        """Doc bo than yeu cau chua dung. Windows dong socket con du lieu chua doc thi gui RST,
+        ben goi mat luon cau tra loi (WinError 10053/10054) thay vi nhan 403."""
+        try:
+            length = int(self.headers.get("Content-Length") or 0)
+        except ValueError:
+            length = 0
+        if 0 < length <= limit:
+            self.rfile.read(length)
+
     def _body(self) -> dict:
         length = int(self.headers.get("Content-Length") or 0)
         if not length:
@@ -215,6 +225,7 @@ class Handler(BaseHTTPRequestHandler):
     # ---- POST ----
     def do_POST(self):
         if not self._authorized():
+            self._drain()
             return self._json({"error": "Từ chối truy cập"}, 403)
         route = urlparse(self.path).path
         payload = self._body()
