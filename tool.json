@@ -2,7 +2,7 @@
   "$schema": "../../hub/schema/tool.schema.json",
   "id": "mdf2sql",
   "name": "Khôi phục file .mdf sang .sql",
-  "version": "2026.10.1",
+  "version": "2026.10.2",
   "category": "chuyen-doi",
   "icon": "database",
   "audience": "tech",
@@ -21,7 +21,7 @@
       "duration": "Chạy đến khi đóng cửa sổ; mỗi file vài chục giây đến vài phút",
       "description": "Mở giao diện trên trình duyệt (127.0.0.1, cổng 8760 hoặc cổng trống kế tiếp nếu đang bận) để chọn file .mdf và xuất .sql. Đóng cửa sổ dòng lệnh để tắt.",
       "changes": [
-        "Lần đầu: cài thư viện pyodbc cho Python của tài khoản này (pip install --user)",
+        "Lần đầu: cài thư viện pyodbc 5.x cho Python của tài khoản này (pip install --user -r requirements.txt)",
         "Gắn tạm bản sao .mdf vào SQL Server rồi gỡ ra; bản sao làm việc ở C:\\Users\\Public\\mdf2sql_work"
       ]
     },
@@ -82,8 +82,7 @@
   ],
   "issues": [
     "Đóng cửa sổ khi đang chuyển: database tạm *__m2s_* còn gắn trong SQL Server và bản sao .mdf nằm lại ở C:\\Users\\Public\\mdf2sql_work.",
-    "Chay_tool.bat dùng 'where python' nên lối tắt Microsoft Store cũng qua được rồi báo lỗi mạng; pyodbc cài không khoá phiên bản vào Python chung.",
-    "Tạo cửa sổ chọn file (Tk) từ luồng HTTP: Tk không an toàn đa luồng, đôi khi làm sập tiến trình.",
+    "pyodbc cài vào Python chung của tài khoản (pip --user, chỉ giới hạn bản 5.x), chưa có .venv riêng.",
     "Chưa đặt setdecoding cho pyodbc: cột varchar không Unicode có thể sai dấu tiếng Việt (cần thử với dữ liệu thật)."
   ],
   "upgrades": [

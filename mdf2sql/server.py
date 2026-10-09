@@ -18,6 +18,7 @@ import os
 import secrets
 import socket
 import subprocess
+import sys
 import threading
 import traceback
 import uuid
@@ -28,9 +29,11 @@ from urllib.parse import parse_qs, urlparse
 from . import __version__, attacher, convert, dbconn
 
 WEB_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "web")
+PKG_PARENT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))   # cwd cho "python -m mdf2sql.pick"
 TOKEN = secrets.token_urlsafe(24)
 DEFAULT_PORT = 8760
 PORT_TRIES = 20          # cong mac dinh ban thi thu tiep 8761..8779 roi moi de he dieu hanh chon
+PICK_TIMEOUT = 30 * 60   # giay; hop thoai chon file bi bo quen thi dong de nut chon file dung duoc lai
 
 # Ti le phan tram uoc tinh cho tung giai doan, de thanh tien trinh chay muot.
 STAGE_PERCENT = {
@@ -101,32 +104,25 @@ def _run_job(job_id: str, payload: dict) -> None:
 
 # ------------------------------------------------------------------ hop thoai
 
-def _pick_file(kind: str, current: str) -> str:
-    """Mo hop thoai chon file cua Windows."""
+def _pick_file(kind: str, current: str) -> tuple[str, str]:
+    """Mo hop thoai chon file cua Windows trong tien trinh con (xem pick.py: Tk khong an toan
+    khi tao tu luong phuc vu HTTP). Tra ve (duong_dan, loi); bam Huy thi ca hai la chuoi rong."""
+    cmd = [sys.executable, "-m", "mdf2sql.pick", "sql" if kind == "sql" else "mdf", current or ""]
     with _dialog_lock:
         try:
-            import tkinter
-            from tkinter import filedialog
-        except ImportError:
-            return ""
-        root = tkinter.Tk()
-        root.withdraw()
-        root.attributes("-topmost", True)
+            proc = subprocess.run(cmd, cwd=PKG_PARENT, capture_output=True, timeout=PICK_TIMEOUT)
+        except subprocess.TimeoutExpired:
+            return "", "Hộp thoại chọn file mở quá lâu nên đã bị đóng."
+        except OSError as exc:
+            return "", "Không mở được hộp thoại chọn file: " + str(exc)
+    for line in reversed(proc.stdout.decode("ascii", "replace").splitlines()):
         try:
-            if kind == "mdf":
-                path = filedialog.askopenfilename(
-                    title="Chọn file .mdf cần chuyển đổi",
-                    filetypes=[("SQL Server database", "*.mdf"), ("Tất cả file", "*.*")])
-            else:
-                initial = os.path.dirname(current) if current else ""
-                name = os.path.basename(current) or "database.sql"
-                path = filedialog.asksaveasfilename(
-                    title="Lưu file .sql", defaultextension=".sql",
-                    initialfile=name, initialdir=initial,
-                    filetypes=[("Script SQL", "*.sql"), ("Tất cả file", "*.*")])
-            return path or ""
-        finally:
-            root.destroy()
+            data = json.loads(line)
+        except ValueError:
+            continue
+        if isinstance(data, dict):
+            return str(data.get("path") or ""), str(data.get("error") or "")
+    return "", "Hộp thoại chọn file bị lỗi (mã thoát " + str(proc.returncode) + ")."
 
 
 # ------------------------------------------------------------------ HTTP
@@ -266,7 +262,9 @@ class Handler(BaseHTTPRequestHandler):
         })
 
     def _pick(self, payload: dict) -> None:
-        path = _pick_file(payload.get("kind") or "mdf", payload.get("current") or "")
+        path, error = _pick_file(payload.get("kind") or "mdf", payload.get("current") or "")
+        if error:
+            return self._json({"error": error}, 500)
         self._json({"path": os.path.normpath(path) if path else ""})
 
     def _convert(self, payload: dict) -> None:

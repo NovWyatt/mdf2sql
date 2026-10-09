@@ -27,7 +27,7 @@ là **không có file log `.ldf`**.
 | Python 3.9 trở lên | tải ở python.org, nhớ tick "Add Python to PATH" |
 | SQL Server | bản Express hoặc LocalDB đều được, đều miễn phí |
 | ODBC Driver 18 for SQL Server | `winget install Microsoft.msodbcsql.18` |
-| pyodbc | file `Chay_tool.bat` tự cài lần đầu |
+| pyodbc 5.x | file `Chay_tool.bat` tự cài lần đầu (`pip install --user -r requirements.txt`) |
 
 Nếu máy chưa có SQL Server, cách nhẹ nhất là cài **SQL Server Express LocalDB**
 (khoảng 60 MB, chạy user-mode, không cần cấu hình dịch vụ):
@@ -188,10 +188,11 @@ mdf2sql/
   reader.py     đọc dữ liệu chịu được trang đĩa hỏng, dùng chung cho cả hai dialect
   convert.py    điều phối toàn bộ quy trình và sinh file .sql
   server.py     máy chủ web cục bộ cho giao diện
+  pick.py       hộp thoại chọn file (Tk) chạy trong tiến trình riêng: Tk không an toàn khi gọi từ luồng HTTP
   doctor.py     kiểm tra môi trường, in cách sửa
   cli.py        giao diện dòng lệnh
   web/          giao diện: index.html, app.css, app.js
-tests/          bài thử (unittest), dùng pyodbc giả: không cần pyodbc thật hay SQL Server
+tests/          bài thử (unittest), dùng pyodbc và tkinter giả: không cần pyodbc thật, SQL Server hay màn hình
 ```
 
 Chạy bài thử (trong thư mục này): `python -m unittest discover -s tests -t .`

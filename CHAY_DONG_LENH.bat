@@ -14,7 +14,7 @@ if /i "%~1"=="doctor" goto :chay
 python -c "import pyodbc" >nul 2>&1
 if errorlevel 1 (
     echo   Lan dau chay: dang cai thu vien pyodbc...
-    python -m pip install --user --quiet pyodbc
+    python -m pip install --user --quiet -r requirements.txt
     if errorlevel 1 goto :loi_pyodbc
 )
 
@@ -29,7 +29,7 @@ exit /b %RC%
 echo   [LOI] Chua co Python 3.9 tro len (lenh "python" hien chi la loi tat Microsoft Store hoac chua cai).
 echo   Cai Python 3.12 tai python.org hoac bang nut Cai trong Tram Tool roi chay lai.
 pause
-exit /b 1
+exit /b 2
 
 :loi_pyodbc
 echo   [LOI] Khong cai duoc pyodbc. Kiem tra ket noi mang roi thu lai.
