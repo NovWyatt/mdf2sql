@@ -191,7 +191,10 @@ mdf2sql/
   doctor.py     kiểm tra môi trường, in cách sửa
   cli.py        giao diện dòng lệnh
   web/          giao diện: index.html, app.css, app.js
+tests/          bài thử (unittest), dùng pyodbc giả: không cần pyodbc thật hay SQL Server
 ```
+
+Chạy bài thử (trong thư mục này): `python -m unittest discover -s tests -t .`
 
 ## Về bảo mật
 
