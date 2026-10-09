@@ -70,6 +70,8 @@ def _registry_drivers() -> list[str]:
 def _check_python(rep: Report) -> None:
     v = sys.version_info
     text = f"Python {v.major}.{v.minor}.{v.micro} ({sys.executable})"
+    if sys.prefix != getattr(sys, "base_prefix", sys.prefix):
+        text += ", .venv riêng"
     if v < (3, 9):
         rep.add("bad", text, fix="Cài Python 3.12 (nút Cài trong Trạm Tool hoặc python.org).", code="PYTHON_CU")
     else:
@@ -79,7 +81,8 @@ def _check_python(rep: Report) -> None:
 def _check_pyodbc(rep: Report) -> bool:
     if dbconn.pyodbc is None:
         rep.add("bad", "Chưa có thư viện pyodbc",
-                fix="python -m pip install --user pyodbc  (nút Chuyển đổi trong Trạm Tool cũng tự cài lần đầu)",
+                fix=("Chạy Chay_tool.bat (hoặc nút Cài hoặc sửa môi trường chạy trong Trạm Tool) một lần: tự tạo .venv "
+                     "riêng trong thư mục tool và cài pyodbc theo requirements.txt."),
                 code="THIEU_PYODBC")
         return False
     rep.add("ok", "pyodbc " + str(getattr(dbconn.pyodbc, "version", "?")), code="PYODBC")

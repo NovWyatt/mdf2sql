@@ -45,7 +45,8 @@ class Instance:
 def pick_driver() -> str:
     if pyodbc is None:
         raise Mdf2SqlError(
-            "Chưa có thư viện pyodbc. Chạy lệnh:  python -m pip install --user pyodbc"
+            "Chưa có thư viện pyodbc. Chạy Chay_tool.bat một lần (tự tạo .venv riêng và cài pyodbc),"
+            " hoặc chạy bằng .venv\\Scripts\\python.exe của tool."
         )
     available = set(pyodbc.drivers())
     for drv in DRIVER_PREFERENCE:

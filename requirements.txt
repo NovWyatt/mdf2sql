@@ -1,1 +1,3 @@
-pyodbc>=5.0,<6
+# Cai vao .venv rieng cua tool (Chay_tool.bat tu tao lan dau), chi ban dung san (--only-binary=:all:).
+# pyodbc 5.3.0 co ban dung san cho Python 3.9 den 3.14 (Windows 64 bit). Doi phien ban thi chay lai bai thu.
+pyodbc==5.3.0

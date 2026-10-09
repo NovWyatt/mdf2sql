@@ -27,7 +27,7 @@ là **không có file log `.ldf`**.
 | Python 3.9 trở lên | tải ở python.org, nhớ tick "Add Python to PATH" |
 | SQL Server | bản Express hoặc LocalDB đều được, đều miễn phí |
 | ODBC Driver 18 for SQL Server | `winget install Microsoft.msodbcsql.18` |
-| pyodbc 5.x | file `Chay_tool.bat` tự cài lần đầu (`pip install --user -r requirements.txt`) |
+| pyodbc 5.3.0 | `Chay_tool.bat` tự tạo `.venv` riêng trong thư mục tool và cài lần đầu (cần mạng, theo `requirements.txt`); Python chung của máy không bị đổi |
 
 Nếu máy chưa có SQL Server, cách nhẹ nhất là cài **SQL Server Express LocalDB**
 (khoảng 60 MB, chạy user-mode, không cần cấu hình dịch vụ):
@@ -72,6 +72,8 @@ Tắt bình thường (Ctrl+C, nút *Tắt* trong Trạm Tool) thì cửa sổ c
 dừng lại để đọc. Mở từ Trạm Tool khi giao diện đang chạy thì Trạm mở lại trang cũ thay vì chạy thêm máy chủ.
 
 ### Dòng lệnh
+
+Gõ `CHAY_DONG_LENH.bat <lệnh>` trong cửa sổ dòng lệnh (vd `CHAY_DONG_LENH.bat info "D:\ITS\database\giuxe.mdf"`) thì tool dùng `.venv` riêng; `CHAY_DONG_LENH.bat cai-dat` chỉ tạo hoặc sửa `.venv` (`--lam-lai` để dựng lại). Gõ tay thì dùng `.venv\Scripts\python.exe` thay cho `python` trong các ví dụ dưới đây.
 
 ```bash
 python -m mdf2sql info "D:\ITS\database\giuxe.mdf"
