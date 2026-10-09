@@ -7,6 +7,7 @@ Package nay gom cac module:
     emit       : sinh script T-SQL (DDL + INSERT) import lai khong loi
     convert    : dieu phoi toan bo quy trinh mdf -> sql
     server     : web GUI chay tren localhost
+    doctor     : kiem tra moi truong (pyodbc, driver ODBC, SQL Server)
 """
 
-__version__ = "1.0.0"
+__version__ = "1.1.0"

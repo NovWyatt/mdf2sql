@@ -2,14 +2,21 @@
 
 Chi lang nghe tren 127.0.0.1 va doi mot ma thong hanh ngau nhien sinh luc khoi dong,
 nen trang web khac tren may khong goi duoc API nay.
+
+Moi lan chay giu rieng mot cong (khong dung chung cong voi tien trinh khac); cong mac dinh
+dang ban thi tu lui sang cong trong. Thong tin may chu dang chay (cong, pid, URL kem ma) ghi
+vao %LOCALAPPDATA%\\mdf2sql\\server.json de Tram Tool tim, kiem tra (/api/health) va tat
+(/api/shutdown).
 """
 
 from __future__ import annotations
 
+import datetime
 import json
 import mimetypes
 import os
 import secrets
+import socket
 import subprocess
 import threading
 import traceback
@@ -18,10 +25,12 @@ import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
-from . import attacher, convert, dbconn
+from . import __version__, attacher, convert, dbconn
 
 WEB_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "web")
 TOKEN = secrets.token_urlsafe(24)
+DEFAULT_PORT = 8760
+PORT_TRIES = 20          # cong mac dinh ban thi thu tiep 8761..8779 roi moi de he dieu hanh chon
 
 # Ti le phan tram uoc tinh cho tung giai doan, de thanh tien trinh chay muot.
 STAGE_PERCENT = {
@@ -48,6 +57,11 @@ def _update(job_id: str, **fields) -> None:
     with _jobs_lock:
         if job_id in _jobs:
             _jobs[job_id].update(fields)
+
+
+def _running_jobs() -> int:
+    with _jobs_lock:
+        return sum(1 for j in _jobs.values() if not j["done"])
 
 
 def _run_job(job_id: str, payload: dict) -> None:
@@ -163,7 +177,14 @@ class Handler(BaseHTTPRequestHandler):
             return self._instances()
         if route == "/api/progress":
             return self._progress()
+        if route == "/api/health":
+            return self._health()
         self._json({"error": "Không có đường dẫn này"}, 404)
+
+    def _health(self) -> None:
+        """Khong can ma: chi cho biet may chu con song, khong lo du lieu hay ma thong hanh."""
+        self._json({"ok": True, "app": "mdf2sql", "version": __version__, "pid": os.getpid(),
+                    "port": self.server.server_address[1], "jobs_running": _running_jobs()})
 
     def _file(self, name: str) -> None:
         path = os.path.join(WEB_DIR, name)
@@ -210,6 +231,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self._convert(payload)
             if route == "/api/reveal":
                 return self._reveal(payload)
+            if route == "/api/shutdown":
+                return self._shutdown(payload)
         except dbconn.Mdf2SqlError as exc:
             return self._json({"error": str(exc)}, 400)
         except Exception as exc:                  # pragma: no cover
@@ -266,19 +289,95 @@ class Handler(BaseHTTPRequestHandler):
             subprocess.Popen(["explorer", os.path.normpath(path)])
         self._json({"ok": True})
 
+    def _shutdown(self, payload: dict) -> None:
+        """Tat may chu. Dang chuyen doi thi tu choi (409), tru khi gui {"force": true}."""
+        running = _running_jobs()
+        if running and not payload.get("force"):
+            return self._json({"error": "Đang chuyển đổi, tắt lúc này sẽ để lại database tạm và bản sao .mdf. "
+                                        "Đợi xong hoặc gửi force.", "jobs_running": running}, 409)
+        self._json({"ok": True, "jobs_running": running})
+        # shutdown() cho serve_forever dung lai, phai goi tu luong khac luong dang phuc vu yeu cau nay
+        threading.Thread(target=self.server.shutdown, daemon=True).start()
 
-def serve(port: int = 8760, open_browser: bool = True) -> None:
+
+class _Server(ThreadingHTTPServer):
+    """Giu cong rieng. HTTPServer bat SO_REUSEADDR; tren Windows co nay cho tien trinh khac nghe
+    cung cong, mo tool hai lan thi giao dien goi nham may chu (ma khac -> 'Tu choi truy cap')."""
+
+    allow_reuse_address = False
+    daemon_threads = True
+
+    def server_bind(self):
+        if hasattr(socket, "SO_EXCLUSIVEADDRUSE"):
+            self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
+        super().server_bind()
+
+
+def bind_server(port: int = DEFAULT_PORT) -> "_Server":
+    """Mo may chu tren 127.0.0.1. port = 0: de he dieu hanh chon; cong ban thi thu cong ke tiep."""
+    if port == 0:
+        return _Server(("127.0.0.1", 0), Handler)
+    last = None
+    for p in range(port, min(port + PORT_TRIES, 65536)):
+        try:
+            return _Server(("127.0.0.1", p), Handler)
+        except OSError as exc:            # 10048 dang co tien trinh nghe, 10013 cong bi Windows giu (Hyper-V...)
+            last = exc
+    try:
+        return _Server(("127.0.0.1", 0), Handler)
+    except OSError:
+        raise last or OSError("Không mở được cổng nào trên 127.0.0.1")
+
+
+def state_path() -> str:
+    base = os.environ.get("LOCALAPPDATA") or os.path.expanduser("~")
+    return os.path.join(base, "mdf2sql", "server.json")
+
+
+def _write_state(port: int, url: str) -> None:
+    path = state_path()
+    try:
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        tmp = path + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as fh:
+            json.dump({"app": "mdf2sql", "version": __version__, "pid": os.getpid(), "port": port,
+                       "url": url, "token": TOKEN,
+                       "started": datetime.datetime.now().isoformat(timespec="seconds")}, fh)
+        os.replace(tmp, path)
+    except OSError:
+        pass
+
+
+def _clear_state() -> None:
+    """Xoa server.json neu van la cua tien trinh nay (lan chay khac co the da ghi de)."""
+    path = state_path()
+    try:
+        with open(path, encoding="utf-8") as fh:
+            if json.load(fh).get("pid") != os.getpid():
+                return
+        os.remove(path)
+    except (OSError, ValueError):
+        pass
+
+
+def serve(port: int = DEFAULT_PORT, open_browser: bool = True) -> None:
     """Khoi dong may chu va mo trinh duyet."""
-    httpd = ThreadingHTTPServer(("127.0.0.1", port), Handler)
-    url = "http://127.0.0.1:" + str(port) + "/?k=" + TOKEN
-    print("mdf2sql dang chay tai:")
-    print("   " + url)
-    print("Dong cua so nay de tat tool.")
+    httpd = bind_server(port)
+    real = httpd.server_address[1]
+    url = "http://127.0.0.1:" + str(real) + "/?k=" + TOKEN
+    if port and real != port:
+        print(f"Cổng {port} đang bận (có thể mdf2sql đã mở ở cửa sổ khác), dùng cổng {real}.", flush=True)
+    print("mdf2sql đang chạy tại:", flush=True)
+    print("   " + url, flush=True)
+    print("Đóng cửa sổ này để tắt tool.", flush=True)
+    _write_state(real, url)
     if open_browser:
         threading.Timer(0.6, lambda: webbrowser.open(url)).start()
     try:
         httpd.serve_forever()
+        print("Đã tắt.", flush=True)
     except KeyboardInterrupt:
-        print("\nDa tat.")
+        print("\nĐã tắt.", flush=True)
     finally:
         httpd.server_close()
+        _clear_state()

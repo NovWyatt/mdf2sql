@@ -6,7 +6,7 @@ import argparse
 import os
 import sys
 
-from . import __version__, convert, dbconn, server
+from . import __version__, convert, dbconn, doctor, server
 
 # Console Windows mac dinh khong phai UTF-8 -> ep lai de tieng Viet co dau khong vo.
 for stream in (sys.stdout, sys.stderr):
@@ -101,8 +101,26 @@ def _cmd_convert(args) -> int:
 
 
 def _cmd_gui(args) -> int:
-    server.serve(port=args.port, open_browser=not args.no_browser)
+    try:
+        server.serve(port=args.port, open_browser=not args.no_browser)
+    except OSError as exc:
+        print("LOI: khong mo duoc may chu tren 127.0.0.1:", exc, flush=True)
+        return 1
     return 0
+
+
+def _cmd_doctor(args) -> int:
+    return doctor.run(srv=args.server or "", connect=not args.no_connect, as_json=args.json)
+
+
+def _port(text: str) -> int:
+    try:
+        n = int(text)
+    except ValueError:
+        n = -1
+    if not 0 <= n <= 65535:
+        raise argparse.ArgumentTypeError("cong phai tu 0 den 65535 (0 = de he dieu hanh chon)")
+    return n
 
 
 def main(argv=None) -> int:
@@ -113,9 +131,16 @@ def main(argv=None) -> int:
     sub = parser.add_subparsers(dest="command")
 
     p_gui = sub.add_parser("gui", help="mo giao dien tren trinh duyet")
-    p_gui.add_argument("--port", type=int, default=8760)
+    p_gui.add_argument("--port", type=_port, default=server.DEFAULT_PORT,
+                       help="cong may chu (mac dinh 8760, ban thi tu lui sang cong trong; 0 = de he dieu hanh chon)")
     p_gui.add_argument("--no-browser", action="store_true")
     p_gui.set_defaults(func=_cmd_gui)
+
+    p_doc = sub.add_parser("doctor", help="kiem tra pyodbc, driver ODBC, SQL Server; chi doc, khong sua")
+    p_doc.add_argument("--server", help="instance can thu, vd .\\SQLEXPRESS (mac dinh: instance convert se dung)")
+    p_doc.add_argument("--no-connect", action="store_true", help="khong thu ket noi SQL Server")
+    p_doc.add_argument("--json", action="store_true", help="in ket qua dang JSON")
+    p_doc.set_defaults(func=_cmd_doctor)
 
     p_info = sub.add_parser("info", help="xem thong tin file .mdf, khong can SQL Server")
     p_info.add_argument("mdf")
@@ -143,7 +168,7 @@ def main(argv=None) -> int:
 
     args = parser.parse_args(argv)
     if not getattr(args, "func", None):
-        return _cmd_gui(argparse.Namespace(port=8760, no_browser=False))
+        return _cmd_gui(argparse.Namespace(port=server.DEFAULT_PORT, no_browser=False))
     return args.func(args)
 
 

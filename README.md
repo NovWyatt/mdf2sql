@@ -40,12 +40,29 @@ Phiên bản SQL Server cài trên máy phải mới hơn hoặc bằng phiên b
 `.mdf`. SQL Server 2022 đọc được file từ 2008 trở lên. Chạy lệnh `info` bên dưới
 để biết file của bạn thuộc phiên bản nào.
 
+Không chắc máy đã đủ chưa thì chạy `doctor`: kiểm tra Python, pyodbc, driver ODBC,
+SQL Server (kết nối thử, quyền tạo database), thư mục làm việc, cổng giao diện, rồi in
+cách sửa từng mục còn thiếu. Lệnh chỉ đọc, không cài hay sửa gì; kết nối LocalDB thì
+LocalDB tự khởi động.
+
+```bash
+python -m mdf2sql doctor
+```
+
+`--server .\SQLEXPRESS` thử một instance cụ thể, `--no-connect` bỏ bước kết nối,
+`--json` in kết quả dạng JSON. Mã thoát: 0 đủ điều kiện, 2 còn thiếu, 1 lỗi bất ngờ.
+
 ## Cách dùng
 
 ### Giao diện
 
 Bấm đúp vào **`Chay_tool.bat`**. Trình duyệt sẽ mở giao diện ở `127.0.0.1`.
 Chọn file `.mdf`, bấm **Chuyển đổi**, chờ vài chục giây.
+
+Giao diện dùng cổng 8760; cổng đó đang bận (đã mở tool ở cửa sổ khác, chương trình khác
+đang dùng) thì tự dùng cổng kế tiếp và in địa chỉ thật ra cửa sổ dòng lệnh. Mỗi cửa sổ
+giữ riêng cổng của nó. `python -m mdf2sql gui --port 0` để hệ điều hành chọn cổng,
+`--no-browser` để không mở trình duyệt.
 
 ### Dòng lệnh
 
@@ -171,6 +188,7 @@ mdf2sql/
   reader.py     đọc dữ liệu chịu được trang đĩa hỏng, dùng chung cho cả hai dialect
   convert.py    điều phối toàn bộ quy trình và sinh file .sql
   server.py     máy chủ web cục bộ cho giao diện
+  doctor.py     kiểm tra môi trường, in cách sửa
   cli.py        giao diện dòng lệnh
   web/          giao diện: index.html, app.css, app.js
 ```
@@ -180,6 +198,14 @@ mdf2sql/
 Máy chủ web chỉ lắng nghe trên `127.0.0.1` và đòi một mã thông hành ngẫu nhiên
 sinh ra mỗi lần khởi động, nên trang web khác đang mở trên máy không gọi được API.
 Không có dữ liệu nào rời khỏi máy của bạn.
+
+Để chương trình khác trên máy (Trạm Tool) quản lý giao diện đang mở:
+
+- `%LOCALAPPDATA%\mdf2sql\server.json`: cổng, số tiến trình, địa chỉ kèm mã của máy chủ
+  đang chạy; xoá khi tắt. Thư mục này chỉ tài khoản của bạn đọc được.
+- `GET /api/health` (không cần mã): `ok`, phiên bản, số tiến trình, cổng, số việc đang chạy.
+- `POST /api/shutdown` (cần mã, header `X-Token`): tắt máy chủ. Đang chuyển đổi thì trả
+  409, trừ khi gửi `{"force": true}`.
 
 ## Giấy phép
 

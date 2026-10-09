@@ -8,7 +8,9 @@ rem Tram Tool goi file nay cho cac nut "Xem thong tin file .mdf" va "Chuyen doi 
 python -c "import sys; sys.exit(0 if sys.version_info >= (3, 9) else 1)" >nul 2>&1
 if errorlevel 1 goto :thieu_python
 rem "info" chi doc phan dau file .mdf: khong can pyodbc, khong can SQL Server.
+rem "doctor" phai bao thieu pyodbc chu khong tu cai.
 if /i "%~1"=="info" goto :chay
+if /i "%~1"=="doctor" goto :chay
 python -c "import pyodbc" >nul 2>&1
 if errorlevel 1 (
     echo   Lan dau chay: dang cai thu vien pyodbc...

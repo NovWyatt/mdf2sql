@@ -157,7 +157,11 @@ def connect(server: str, database: str = "master", timeout: int = 30,
     try:
         conn = pyodbc.connect(conn_str, timeout=timeout, autocommit=autocommit)
     except pyodbc.Error as exc:
-        raise Mdf2SqlError(f"Không kết nối được SQL Server '{server}': {_clean(exc)}") from exc
+        hint = ""
+        if driver == "SQL Server":
+            hint = ("\nMáy chỉ có driver ODBC 'SQL Server' rất cũ, không kết nối được LocalDB và SQL Server đời mới. "
+                    "Cài 'ODBC Driver 18 for SQL Server':  winget install Microsoft.msodbcsql.18")
+        raise Mdf2SqlError(f"Không kết nối được SQL Server '{server}': {_clean(exc)}{hint}") from exc
 
     # DBCC tra ve cot kieu sql_variant ma pyodbc chua hieu -> tu giai ma sang chuoi.
     for sqltype in (-15, -150, -155):
