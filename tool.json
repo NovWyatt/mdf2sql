@@ -79,9 +79,9 @@
     "Chưa đặt setdecoding cho pyodbc: cột varchar không Unicode có thể sai dấu tiếng Việt (cần thử với dữ liệu thật)."
   ],
   "upgrades": [
-    "P0 – Lệnh 'mdf2sql doctor' kiểm tra pyodbc, driver ODBC, instance SQL và in cách sửa bằng tiếng Việt (Trạm Tool đã có nút cài ODBC 18 và LocalDB).",
-    "P0 – Không dùng chung cổng, tự lùi sang cổng trống, nhận --port 0, in URL thật và flush; thêm /api/health, /api/shutdown để Trạm Tool quản lý.",
-    "P1 – .venv riêng với pyodbc khoá phiên bản thay cho pip install --user; khi khởi động dọn database tạm và thư mục session_* bị bỏ lại.",
-    "P2 – Chọn instance trên giao diện; kết nối LocalDB qua named pipe khi chỉ có driver cũ; setdecoding cho varchar."
+    "P0: Lệnh 'mdf2sql doctor' kiểm tra pyodbc, driver ODBC, instance SQL và in cách sửa bằng tiếng Việt (Trạm Tool đã có nút cài ODBC 18 và LocalDB).",
+    "P0: Không dùng chung cổng, tự lùi sang cổng trống, nhận --port 0, in URL thật và flush; thêm /api/health, /api/shutdown để Trạm Tool quản lý.",
+    "P1: .venv riêng với pyodbc khoá phiên bản thay cho pip install --user; khi khởi động dọn database tạm và thư mục session_* bị bỏ lại.",
+    "P2: Chọn instance trên giao diện; kết nối LocalDB qua named pipe khi chỉ có driver cũ; setdecoding cho varchar."
   ]
 }
