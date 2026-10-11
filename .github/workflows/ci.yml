@@ -1,5 +1,6 @@
 # Chạy bộ test mỗi khi push hoặc mở pull request.
-# Test dùng pyodbc và tkinter giả (tests/fake_*), nên không cần SQL Server hay cài pyodbc.
+# Chạy trên Windows vì công cụ dành cho Windows và vài test kiểm tra đường dẫn kiểu Windows.
+# Test dùng pyodbc và tkinter giả (tests/fake_*), nên không cần cài SQL Server hay pyodbc.
 name: CI
 
 on:
@@ -10,7 +11,7 @@ on:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    runs-on: windows-latest
     strategy:
       fail-fast: false
       matrix:
